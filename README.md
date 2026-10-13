@@ -1,10 +1,15 @@
 # algosproj-sandbox
 
-Python FastAPI service that will run user-submitted code inside Docker containers.
-Only the backend calls this service; it is not exposed to the frontend. Right now it is
-scaffold only — a single health route, no Docker or code-execution logic yet.
+Runs user-submitted code for AlgosProj, a platform for learning data structures and
+algorithms. It takes code plus test cases, runs them in a throwaway Docker container, and
+returns the results as JSON. Only the Laravel backend (`algosproj-backend`) calls this
+service, using a shared secret; it is never exposed to the public internet.
 
-## Running it
+## Stack
+
+Python, FastAPI, Docker SDK for Python.
+
+## Setup
 
 ```bash
 python -m venv venv
@@ -13,4 +18,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Then check http://localhost:8000/health — it returns `{"status": "ok"}`.
+The backend also defaults to port 8000, so pass `--port 8001` if you run both locally.
+
+## Environment variables
+
+- `SANDBOX_SECRET` — shared secret; requests must send it in the `X-Sandbox-Secret` header
