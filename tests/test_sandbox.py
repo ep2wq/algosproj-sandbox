@@ -325,6 +325,126 @@ def test_fork_bomb_is_stopped(base_url, language):
     assert body["results"][0]["passed"] is False
 
 
+# --- Expected outputs are hidden from user code ---------------------------------------
+
+MARKER = "SECRET_EXPECTED_12345"
+
+# Each program searches the environment, /proc/1/environ, /proc/self/environ and every
+# file under /tmp and the working directory, also base64-decoding anything that looks
+# like base64 (the submission travels base64-encoded). It prints "HITS [...]" first, so
+# a find survives the output being cut to 500 characters, then everything it found.
+# The marker is built at runtime, so the program's own source file doesn't contain it.
+SNOOP = {
+    "python": r"""
+import base64, os, re
+needle = "SECRET_EXPECTED_" + str(12345)
+found, notes = [], []
+
+def add(where, data):
+    if isinstance(data, bytes):
+        data = data.decode("utf-8", "replace")
+    found.append((where, data))
+    for token in re.split(r"[\s\x00]+", data):
+        for candidate in (token, token.split("=", 1)[-1]):
+            if re.fullmatch(r"[A-Za-z0-9+/]{8,}={0,2}", candidate):
+                try:
+                    decoded = base64.b64decode(candidate + "==").decode("utf-8", "replace")
+                    found.append((where + " (base64)", decoded))
+                except Exception:
+                    pass
+
+for key, value in os.environ.items():
+    add("env " + key, value)
+for path in ("/proc/1/environ", "/proc/self/environ"):
+    try:
+        add(path, open(path, "rb").read())
+    except OSError as e:
+        notes.append(f"{path} blocked {e.errno}")
+for root in ("/tmp", os.getcwd()):
+    for dirpath, _, files in os.walk(root):
+        for name in files:
+            path = os.path.join(dirpath, name)
+            try:
+                add(path, open(path, "rb").read())
+            except OSError as e:
+                notes.append(f"{path} unreadable {e.errno}")
+
+print("HITS", [where for where, text in found if needle in text])
+print("\n".join(notes))
+for where, text in found:
+    print(where, text[:200])
+""",
+    "javascript": r"""
+const fs = require('fs');
+const path = require('path');
+const needle = 'SECRET_EXPECTED_' + String(12345);
+const found = [];
+const notes = [];
+
+function add(where, data) {
+  data = String(data);
+  found.push([where, data]);
+  for (const token of data.split(/[\s\0]+/)) {
+    for (const candidate of [token, token.slice(token.indexOf('=') + 1)]) {
+      if (/^[A-Za-z0-9+/]{8,}={0,2}$/.test(candidate)) {
+        found.push([where + ' (base64)', Buffer.from(candidate, 'base64').toString('utf8')]);
+      }
+    }
+  }
+}
+
+function walk(dir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (e) {
+    notes.push(dir + ' unlistable ' + e.code);
+    return;
+  }
+  for (const entry of entries) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(p);
+    else if (entry.isFile()) {
+      try {
+        add(p, fs.readFileSync(p));
+      } catch (e) {
+        notes.push(p + ' unreadable ' + e.code);
+      }
+    }
+  }
+}
+
+for (const [key, value] of Object.entries(process.env)) add('env ' + key, value);
+for (const p of ['/proc/1/environ', '/proc/self/environ']) {
+  try {
+    add(p, fs.readFileSync(p));
+  } catch (e) {
+    notes.push(p + ' blocked ' + e.code);
+  }
+}
+walk('/tmp');
+walk(process.cwd());
+
+console.log('HITS ' + JSON.stringify(found.filter(([, text]) => text.includes(needle)).map(([where]) => where)));
+console.log(notes.join('\n'));
+for (const [where, text] of found) console.log(where, text.slice(0, 200));
+""",
+}
+
+
+@pytest.mark.parametrize("language", ["python", "javascript"])
+def test_expected_output_is_hidden_from_user_code(base_url, language):
+    body = run(base_url, language, SNOOP[language], [{"input": "1\n", "expected_output": MARKER}])
+    assert body["status"] == "failed", body
+    result = body["results"][0]
+    assert result["error"] is None, result
+    assert result["actual"].startswith("HITS []"), result["actual"]
+    # "expected" echoes the expected output back by design; no other field may contain it.
+    for r in body["results"]:
+        del r["expected"]
+    assert MARKER not in json.dumps(body)
+
+
 # --- Request validation ---------------------------------------------------------------
 
 VALID_BODY = {"language": "python", "code": CORRECT["python"], "test_cases": DOUBLE_TESTS}
