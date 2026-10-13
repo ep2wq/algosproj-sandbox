@@ -1,3 +1,19 @@
+Make ep2wq the only author and contributor in all three repos (algosproj-frontend, algosproj-backend, algosproj-sandbox). Don't change any code.
+
+1. Identity. In each repo, set the local git config: user.name "ep2wq" and user.email "<EMAIL>". Use git config (without --global).
+
+2. Stop adding Claude as a co-author in future commits.
+   - Create or update AlgosProj/.claude/settings.json so commits and PRs have no attribution. Check which setting this version of Claude Code supports: the "attribution" setting with empty "commit" and "pr" strings, or "includeCoAuthoredBy": false. Keep any existing settings in that file.
+   - Also add this rule to the "Working rules" section of each repo's CLAUDE.md: "Never add Co-Authored-By or Claude-Session lines, or any other attribution, to commit messages or PR descriptions. ep2wq is the only author."
+
+3. Existing commits. For each repo, run git log --format="%h | %an <%ae> | %s" and git status -sb. If the branch has already been pushed (it tracks origin/main and is not ahead of it, or origin/main exists), do NOT rewrite anything in that repo. Tell me and move on. For repos with unpushed commits only:
+   - Rewrite all commits so the author and committer are ep2wq <EMAIL>.
+   - Remove every line starting with "Co-Authored-By:" or "Claude-Session:" from the commit messages, plus any blank line left at the end of a message.
+   Use whatever works on this machine (git filter-branch with --env-filter and --msg-filter, or git rebase --root with --exec). Make a backup branch first (git branch backup-before-rewrite) and tell me its name.
+
+4. Verify. For each repo show git log --format="%h | %an <%ae> | %cn <%ce> | %s", and run a search of the full commit messages for "co-authored" and "claude" (git log --format=%B and findstr /i). Both must be clean: every commit shows ep2wq, and the search finds nothing.
+
+Don't push and don't force-push anything. When done, summarize per repo: rewritten, skipped (already pushed), or already clean.
 # CLAUDE.md
 
 ## Project overview
@@ -63,3 +79,47 @@ server-side. Never trust a score sent by the client.
 - Don't do extra work beyond the request. If you spot something worth fixing, mention it
   instead of changing it.
 - Ask before adding a new dependency.
+- Never add Co-Authored-By or Claude-Session lines, or any other attribution, to commit
+  messages or PR descriptions. ep2wq is the only author.
+
+## Session routine
+
+- At the start of a session, read this file and the "Current status" section before
+  doing anything else.
+- Before ending a session, or when I say we're done, update "Current status" to match
+  reality. Rewrite the section; don't append to it. Remove items that are finished or no
+  longer true, so the file stays short (under about 60 lines in total).
+- Only record facts you verified in the repo or that I told you. Don't guess.
+- Update the other sections of this file too if something in them became wrong.
+- Don't commit the CLAUDE.md update unless I ask. Tell me it changed.
+
+## Current status
+
+### Done
+- `/health`, `/languages`, `/run` with the secret check and 400/401/413 limits.
+- One runner image for python, java, javascript and cpp, with all container limits.
+- 34 pytest tests pass against real Docker, including adversarial ones and a check that
+  user code can't find the expected output. Committed and pushed.
+
+### In progress
+- Nothing.
+
+### Next
+- Create a local `.env` with a real `SANDBOX_SECRET` (there is none yet); the backend
+  needs the same value.
+- Have the backend call `POST /run`.
+
+### Decisions
+- The Java class must be named `Main`.
+- `status` "error" means a compile error or a crash; Python/JavaScript syntax errors show
+  up as a crash in `results[].error`, not in `compile_error`.
+- Submissions over about 120 KB encoded get 413, because Linux caps one env var at 128 KiB.
+- Tests call a real uvicorn with `urllib` instead of `TestClient`, which would need httpx.
+- The hidden-output test covers Python and JavaScript only: Java/C++ compilers may join
+  the marker's halves into one string in the build output and cause a false failure.
+
+### Gotchas
+- Rebuild the image after any change in `runner/`; the tests use the image.
+- `os.kill(-1, ...)` raises `ProcessLookupError` when nothing is left to kill; ignore it.
+- The leftover-container check filters on `algosproj-run-`, since `algosproj` also
+  matches `algosproj-mysql`.
