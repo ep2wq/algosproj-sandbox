@@ -1,19 +1,3 @@
-Make ep2wq the only author and contributor in all three repos (algosproj-frontend, algosproj-backend, algosproj-sandbox). Don't change any code.
-
-1. Identity. In each repo, set the local git config: user.name "ep2wq" and user.email "<EMAIL>". Use git config (without --global).
-
-2. Stop adding Claude as a co-author in future commits.
-   - Create or update AlgosProj/.claude/settings.json so commits and PRs have no attribution. Check which setting this version of Claude Code supports: the "attribution" setting with empty "commit" and "pr" strings, or "includeCoAuthoredBy": false. Keep any existing settings in that file.
-   - Also add this rule to the "Working rules" section of each repo's CLAUDE.md: "Never add Co-Authored-By or Claude-Session lines, or any other attribution, to commit messages or PR descriptions. ep2wq is the only author."
-
-3. Existing commits. For each repo, run git log --format="%h | %an <%ae> | %s" and git status -sb. If the branch has already been pushed (it tracks origin/main and is not ahead of it, or origin/main exists), do NOT rewrite anything in that repo. Tell me and move on. For repos with unpushed commits only:
-   - Rewrite all commits so the author and committer are ep2wq <EMAIL>.
-   - Remove every line starting with "Co-Authored-By:" or "Claude-Session:" from the commit messages, plus any blank line left at the end of a message.
-   Use whatever works on this machine (git filter-branch with --env-filter and --msg-filter, or git rebase --root with --exec). Make a backup branch first (git branch backup-before-rewrite) and tell me its name.
-
-4. Verify. For each repo show git log --format="%h | %an <%ae> | %cn <%ce> | %s", and run a search of the full commit messages for "co-authored" and "claude" (git log --format=%B and findstr /i). Both must be clean: every commit shows ep2wq, and the search finds nothing.
-
-Don't push and don't force-push anything. When done, summarize per repo: rewritten, skipped (already pushed), or already clean.
 # CLAUDE.md
 
 ## Project overview
