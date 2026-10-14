@@ -45,6 +45,29 @@ uvicorn app.main:app --reload --port 8001
 
 The backend also defaults to port 8000, which is why the example uses `--port 8001`.
 
+## Docker
+
+> **Warning: local development only.** The service starts runner containers through the
+> Docker API, so this setup mounts `/var/run/docker.sock`, which gives the container
+> root-level control of the host. In production, run the sandbox service directly on a
+> dedicated VPS (or with rootless Podman), not as a container with the socket mounted.
+
+The image holds only the API; build the runner image separately (see Setup). No `.env`
+is copied into the image; pass configuration as environment variables.
+
+```bash
+docker build -t algosproj-sandbox .
+docker run --rm -p 8001:8001 -e SANDBOX_SECRET=your-secret \
+  -v /var/run/docker.sock:/var/run/docker.sock --group-add 0 algosproj-sandbox
+```
+
+The service runs as a non-root user, so `--group-add` must give it the socket's group:
+`0` on Docker Desktop, or `$(stat -c %g /var/run/docker.sock)` on a Linux host. From Git
+Bash on Windows, prefix the command with `MSYS_NO_PATHCONV=1` so the socket path isn't
+rewritten.
+
+Environment variables: `SANDBOX_SECRET` (required).
+
 ## Tests
 
 The tests start the service and run code in real Docker containers, so Docker must be

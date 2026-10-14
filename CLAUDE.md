@@ -72,6 +72,7 @@ server-side. Never trust a score sent by the client.
   - Run: `python -m venv venv`, `pip install -r requirements.txt`, copy `.env.example`
     to `.env`, `uvicorn app.main:app --reload --port 8001`
   - Test (needs Docker running and the image built): `python -m pytest tests -v`
+  - `Dockerfile` builds the API image (`docker build -t algosproj-sandbox .`), for local dev only; see README "Docker".
 
 ## Working rules
 
