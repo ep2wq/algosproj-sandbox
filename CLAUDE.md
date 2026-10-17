@@ -90,8 +90,8 @@ server-side. Never trust a score sent by the client.
 - Nothing.
 
 ### Next
-- Create a local `.env` with a real `SANDBOX_SECRET` (there is none yet); the backend
-  needs the same value.
+- The local `.env` sets `SANDBOX_SECRET`, the only variable the app reads from it; the
+  backend's `SANDBOX_SECRET` must have the same value.
 - Have the backend call `POST /run`.
 
 ### Decisions
