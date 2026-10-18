@@ -57,6 +57,8 @@ server-side. Never trust a score sent by the client.
     to `.env`, `uvicorn app.main:app --reload --port 8001`
   - Test (needs Docker running and the image built): `python -m pytest tests -v`
   - `Dockerfile` builds the API image (`docker build -t algosproj-sandbox .`), for local dev only; see README "Docker".
+- The local `.env` sets `SANDBOX_SECRET`, the only variable the app reads from it; the
+  backend's `SANDBOX_SECRET` must have the same value.
 
 ## Working rules
 
@@ -90,9 +92,7 @@ server-side. Never trust a score sent by the client.
 - Nothing.
 
 ### Next
-- The local `.env` sets `SANDBOX_SECRET`, the only variable the app reads from it; the
-  backend's `SANDBOX_SECRET` must have the same value.
-- Have the backend call `POST /run`.
+- Nothing.
 
 ### Decisions
 - The Java class must be named `Main`.
