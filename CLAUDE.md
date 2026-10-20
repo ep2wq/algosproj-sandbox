@@ -75,7 +75,7 @@ server-side. Never trust a score sent by the client.
   doing anything else.
 - Before ending a session, or when I say we're done, update "Current status" to match
   reality. Rewrite the section; don't append to it. Remove items that are finished or no
-  longer true, so the file stays short (under about 60 lines in total).
+  longer true, so the file stays concise.
 - Only record facts you verified in the repo or that I told you. Don't guess.
 - Update the other sections of this file too if something in them became wrong.
 - Don't commit the CLAUDE.md update unless I ask. Tell me it changed.
