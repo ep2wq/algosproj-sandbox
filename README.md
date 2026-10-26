@@ -1,6 +1,6 @@
 # algosproj-sandbox
 
-Runs user-submitted code for AlgosProj, a platform for learning data structures and
+Runs user-submitted code for AlgosLab, a platform for learning data structures and
 algorithms. It takes code plus test cases, runs them in a throwaway Docker container, and
 returns the results as JSON. Only the Laravel backend (`algosproj-backend`) calls this
 service, using a shared secret; it is never exposed to the public internet.

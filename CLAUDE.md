@@ -2,7 +2,7 @@
 
 ## Project overview
 
-AlgosProj is an interactive learning platform for data structures and algorithms.
+AlgosLab is an interactive learning platform for data structures and algorithms.
 Students read a lesson, watch a visualization, write code in the browser (Python, Java,
 JavaScript or C++), and the code is run against test cases. Passing earns points on a leaderboard.
 An AI tutor gives hints.
