@@ -10,7 +10,7 @@ An AI tutor gives hints.
 Three separate repos, three separate deployments:
 
 - **algosproj-frontend**: React + TypeScript + Vite + Tailwind v4. Talks only to the backend.
-- **algosproj-backend**: Laravel API. Handles auth (Sanctum tokens), lessons, problems,
+- **algosproj-backend**: Laravel API. Handles auth (Sanctum cookie sessions, no API tokens), lessons, problems,
   submissions, points and the leaderboard. It is the only service that calls the sandbox.
 - **algosproj-sandbox**: FastAPI service that runs user code in throwaway Docker containers
   and returns the results. Never exposed to the public internet; the backend calls it with
