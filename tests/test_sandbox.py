@@ -491,6 +491,36 @@ def test_api_docs_are_off_by_default(base_url):
         assert error.value.code == 404, path
 
 
+SLEEP_2S = "import time\ntime.sleep(2)\nprint(input())\n"
+
+
+def test_at_most_four_runs_at_once_the_rest_get_503(base_url):
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(_):
+        request = urllib.request.Request(
+            f"{base_url}/run",
+            data=json.dumps({"language": "python", "code": SLEEP_2S, "test_cases": [{"input": "x\n", "expected_output": "x"}]}).encode(),
+            headers={"Content-Type": "application/json", "X-Sandbox-Secret": SECRET},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                return response.status, json.load(response)["status"], None
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e), e.headers.get("Retry-After")
+
+    with ThreadPoolExecutor(10) as pool:
+        answers = list(pool.map(one, range(10)))
+    ok = [a for a in answers if a[0] == 200]
+    busy = [a for a in answers if a[0] == 503]
+    assert 1 <= len(ok) <= 4, answers
+    assert len(ok) + len(busy) == 10, answers
+    assert all(a[1] == "passed" for a in ok), answers
+    assert all(a[1] == {"detail": "Sandbox busy"} and a[2] == "5" for a in busy), answers
+    # The slots are free again.
+    assert run(base_url, "python", CORRECT["python"])["status"] == "passed"
+
+
 # Keep this last: pytest runs tests in file order.
 def test_no_containers_left_behind(base_url):
     # Run containers are named algosproj-run-*; the filter skips other algosproj

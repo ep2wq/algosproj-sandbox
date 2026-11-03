@@ -1,5 +1,6 @@
 import hmac
 import os
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -26,6 +27,9 @@ def load_env_file(path):
 
 load_env_file(Path(__file__).resolve().parent.parent / ".env")
 
+# At most this many runs at once (each is a container with 1 CPU and 256 MB); more get 503 at once.
+MAX_RUNS = int(os.environ.get("SANDBOX_MAX_RUNS", "4"))
+RUN_SLOTS = threading.BoundedSemaphore(MAX_RUNS)
 # The API docs (/docs, /redoc, /openapi.json) only with SANDBOX_DOCS=1, for local development.
 DOCS = os.environ.get("SANDBOX_DOCS") == "1"
 # The only paths without the secret.
@@ -86,4 +90,10 @@ def run(request: RunRequest):
     if len(sandbox.encode_submission(request.language, request.code, test_cases)) > sandbox.MAX_PAYLOAD:
         raise HTTPException(status_code=413, detail="Submission (code plus test cases) is too large")
 
-    return sandbox.run_submission(request.language, request.code, test_cases)
+    # No queue: when every slot is busy the caller (the backend) answers "try again shortly".
+    if not RUN_SLOTS.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="Sandbox busy", headers={"Retry-After": "5"})
+    try:
+        return sandbox.run_submission(request.language, request.code, test_cases)
+    finally:
+        RUN_SLOTS.release()
