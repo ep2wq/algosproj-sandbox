@@ -13,6 +13,9 @@ WALL_TIMEOUT = 40  # seconds for the whole container, compile included
 MAX_OUTPUT = 64 * 1024  # bytes of container output we read
 # The payload travels in an environment variable, and Linux caps a single one at 128 KiB.
 MAX_PAYLOAD = 120 * 1024
+MAX_FILE_SIZE = 10 * 1024 * 1024  # bytes any process in the container may write to one file
+# Every runner container carries this label; only labelled containers are ever cleaned up.
+LABEL_KEY, LABEL_VALUE = "algosproj.sandbox", "runner"
 
 _client = None
 
@@ -38,6 +41,7 @@ def run_submission(language, code, test_cases):
         container = client().containers.create(
             IMAGE,
             name=f"algosproj-run-{uuid.uuid4().hex[:12]}",
+            labels={LABEL_KEY: LABEL_VALUE},
             environment={"SUBMISSION": payload, "HOME": "/tmp"},
             network_disabled=True,
             mem_limit="256m",
@@ -50,6 +54,7 @@ def run_submission(language, code, test_cases):
             cap_drop=["ALL"],
             security_opt=["no-new-privileges"],
             nano_cpus=1_000_000_000,
+            ulimits=[docker.types.Ulimit(name="fsize", soft=MAX_FILE_SIZE, hard=MAX_FILE_SIZE)],
         )
         container.start()
         try:
@@ -74,6 +79,14 @@ def run_submission(language, code, test_cases):
             container.remove(force=True)
 
     return build_response(output, test_cases, elapsed_ms(started))
+
+
+def remove_leftover_containers():
+    """Removes runner containers (by label) that an earlier process left behind. Returns the count."""
+    leftovers = client().containers.list(all=True, filters={"label": f"{LABEL_KEY}={LABEL_VALUE}"})
+    for container in leftovers:
+        container.remove(force=True)
+    return len(leftovers)
 
 
 def elapsed_ms(started):

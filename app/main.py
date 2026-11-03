@@ -1,6 +1,7 @@
 import hmac
 import os
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -36,7 +37,21 @@ DOCS = os.environ.get("SANDBOX_DOCS") == "1"
 PUBLIC_PATHS = {"/health", "/languages"} | ({"/docs", "/redoc", "/openapi.json"} if DOCS else set())
 
 
+@asynccontextmanager
+async def lifespan(app):
+    # Runner containers left by an earlier process (a crash, a kill) are removed at start-up. Only
+    # containers with the runner label; run one sandbox process per Docker host.
+    try:
+        removed = sandbox.remove_leftover_containers()
+        if removed:
+            print(f"Removed {removed} leftover runner container(s)")
+    except Exception as e:  # best effort: the service also starts while Docker is down, as before
+        print(f"Could not check for leftover runner containers: {e}")
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     docs_url="/docs" if DOCS else None,
     redoc_url="/redoc" if DOCS else None,
     openapi_url="/openapi.json" if DOCS else None,

@@ -22,12 +22,8 @@ DOUBLE_TESTS = [
 ]
 
 
-@pytest.fixture(scope="session")
-def base_url():
-    image = subprocess.run(["docker", "image", "inspect", "algosproj-runner"], capture_output=True)
-    if image.returncode != 0:
-        pytest.fail("Image algosproj-runner not found. Run: docker build -t algosproj-runner runner")
-
+def start_service():
+    """Starts the service with uvicorn on a free port; returns (process, url) once /health answers."""
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
@@ -41,12 +37,21 @@ def base_url():
     while True:
         try:
             urllib.request.urlopen(f"{url}/health", timeout=1)
-            break
+            return server, url
         except OSError:
             if time.monotonic() > deadline:
                 server.kill()
                 pytest.fail("uvicorn did not start")
             time.sleep(0.2)
+
+
+@pytest.fixture(scope="session")
+def base_url():
+    image = subprocess.run(["docker", "image", "inspect", "algosproj-runner"], capture_output=True)
+    if image.returncode != 0:
+        pytest.fail("Image algosproj-runner not found. Run: docker build -t algosproj-runner runner")
+
+    server, url = start_service()
     yield url
     server.terminate()
     server.wait()
@@ -519,6 +524,51 @@ def test_at_most_four_runs_at_once_the_rest_get_503(base_url):
     assert all(a[1] == {"detail": "Sandbox busy"} and a[2] == "5" for a in busy), answers
     # The slots are free again.
     assert run(base_url, "python", CORRECT["python"])["status"] == "passed"
+
+
+FILE_SIZE = """import signal
+signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+with open("/tmp/small", "wb") as f:
+    f.write(b"x" * 5 * 1024 * 1024)
+print("ok", end=" ")
+try:
+    with open("/tmp/big", "wb") as f:
+        f.write(b"x" * 11 * 1024 * 1024)
+    print("written")
+except OSError:
+    print("blocked")
+"""
+
+
+def test_files_over_10_mb_cannot_be_written(base_url):
+    body = run(base_url, "python", FILE_SIZE, [{"input": "", "expected_output": "ok blocked"}])
+    assert body["status"] == "passed", body
+
+
+def containers():
+    """{name: runner label value} of every container on this machine."""
+    lines = subprocess.run(
+        ["docker", "ps", "-a", "--format", '{{.Names}} {{.Label "algosproj.sandbox"}}'],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    return dict((line.split(" ", 1) + [""])[:2] for line in lines if line)
+
+
+def test_leftover_runner_containers_are_removed_at_start_up(base_url):
+    # A labelled container that was never started, as a crash would leave it.
+    subprocess.run(
+        ["docker", "create", "--label", "algosproj.sandbox=runner", "--name", "algosproj-run-leftover-test", "algosproj-runner"],
+        capture_output=True, check=True,
+    )
+    others = {name for name, label in containers().items() if label != "runner"}
+
+    server, _ = start_service()
+    server.terminate()
+    server.wait()
+
+    after = containers()
+    assert "algosproj-run-leftover-test" not in after
+    assert {name for name, label in after.items() if label != "runner"} == others
 
 
 # Keep this last: pytest runs tests in file order.
