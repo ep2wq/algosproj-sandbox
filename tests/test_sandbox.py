@@ -465,6 +465,32 @@ def test_unknown_language_is_rejected(base_url):
     assert status == 400
 
 
+def raw_post(base_url, path, data, secret):
+    headers = {"Content-Type": "application/json"}
+    if secret is not None:
+        headers["X-Sandbox-Secret"] = secret
+    try:
+        with urllib.request.urlopen(urllib.request.Request(f"{base_url}{path}", data=data, headers=headers), timeout=30) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def test_secret_is_checked_before_the_body_is_parsed(base_url):
+    # A malformed body would be a 422 if it were parsed first.
+    for secret in (None, "wrong", "wérong"):
+        assert raw_post(base_url, "/run", b"{not json", secret) == 401
+    assert raw_post(base_url, "/run", b"{not json", SECRET) == 422
+
+
+def test_api_docs_are_off_by_default(base_url):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        request = urllib.request.Request(f"{base_url}{path}", headers={"X-Sandbox-Secret": SECRET})
+        with pytest.raises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(request, timeout=10)
+        assert error.value.code == 404, path
+
+
 # Keep this last: pytest runs tests in file order.
 def test_no_containers_left_behind(base_url):
     # Run containers are named algosproj-run-*; the filter skips other algosproj

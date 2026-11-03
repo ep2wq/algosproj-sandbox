@@ -2,7 +2,8 @@ import hmac
 import os
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app import sandbox
@@ -25,7 +26,17 @@ def load_env_file(path):
 
 load_env_file(Path(__file__).resolve().parent.parent / ".env")
 
-app = FastAPI()
+# The API docs (/docs, /redoc, /openapi.json) only with SANDBOX_DOCS=1, for local development.
+DOCS = os.environ.get("SANDBOX_DOCS") == "1"
+# The only paths without the secret.
+PUBLIC_PATHS = {"/health", "/languages"} | ({"/docs", "/redoc", "/openapi.json"} if DOCS else set())
+
+
+app = FastAPI(
+    docs_url="/docs" if DOCS else None,
+    redoc_url="/redoc" if DOCS else None,
+    openapi_url="/openapi.json" if DOCS else None,
+)
 
 
 class TestCase(BaseModel):
@@ -39,10 +50,16 @@ class RunRequest(BaseModel):
     test_cases: list[TestCase]
 
 
-def check_secret(x_sandbox_secret: str | None = Header(default=None)):
-    expected = os.environ.get("SANDBOX_SECRET")
-    if not expected or not x_sandbox_secret or not hmac.compare_digest(x_sandbox_secret, expected):
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Sandbox-Secret")
+# Middleware, so the secret is checked before the body is read or parsed. Constant-time, on bytes
+# (a str compare fails on non-ASCII text); no configured secret rejects everything.
+@app.middleware("http")
+async def check_secret(request: Request, call_next):
+    if request.url.path not in PUBLIC_PATHS:
+        expected = os.environ.get("SANDBOX_SECRET", "").encode()
+        given = request.headers.get("x-sandbox-secret", "").encode("latin-1")
+        if not expected or not given or not hmac.compare_digest(given, expected):
+            return JSONResponse({"detail": "Invalid or missing X-Sandbox-Secret"}, status_code=401)
+    return await call_next(request)
 
 
 @app.get("/health")
@@ -56,7 +73,7 @@ def languages():
 
 
 # A plain def, so FastAPI runs the blocking Docker calls in its thread pool.
-@app.post("/run", dependencies=[Depends(check_secret)])
+@app.post("/run")
 def run(request: RunRequest):
     if request.language not in sandbox.LANGUAGES:
         raise HTTPException(status_code=400, detail=f"Unsupported language: {request.language}")
