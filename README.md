@@ -66,7 +66,7 @@ The service runs as a non-root user, so `--group-add` must give it the socket's 
 Bash on Windows, prefix the command with `MSYS_NO_PATHCONV=1` so the socket path isn't
 rewritten.
 
-Environment variables: `SANDBOX_SECRET` (required).
+Environment variables: `SANDBOX_SECRET` (required), `SANDBOX_MAX_RUNS` and `SANDBOX_DOCS` (optional, see below).
 
 ## Tests
 
@@ -80,7 +80,16 @@ python -m pytest tests -v
 ## Environment variables
 
 - `SANDBOX_SECRET`: shared secret; requests must send it in the `X-Sandbox-Secret` header.
-  Read from `.env` if it isn't set in the environment.
+  Read from `.env` if it isn't set in the environment. It is checked (constant-time) before the
+  request body is read; every path except `/health` and `/languages` needs it, and with no secret
+  configured every such request gets 401.
+- `SANDBOX_MAX_RUNS` (default `4`): at most this many runs at the same time. When every slot is busy,
+  `/run` answers `503` `{"detail": "Sandbox busy"}` with `Retry-After: 5` at once (no queue); the
+  backend turns that into its "code runner unavailable" 503.
+- `SANDBOX_DOCS`: `1` turns on FastAPI's `/docs`, `/redoc` and `/openapi.json` for local development.
+  Off by default (404).
+
+All variables can also be set in `.env`; real environment variables win.
 
 ## API
 
@@ -110,11 +119,17 @@ Response:
 
 Errors: `401` wrong or missing secret, `400` unknown language, `413` code over 64 KB, more
 than 50 test cases, or code plus test cases too big to pass to the container (about
-120 KB encoded), `422` malformed body.
+120 KB encoded), `422` malformed body, `503` every run slot busy (`Retry-After: 5`).
+
+A run with no test cases is never `passed` (the backend refuses such a problem before calling).
 
 ## Limits
 
 Every run gets its own container, removed afterward: no network, 256 MB memory with no
 swap, 64 processes/threads, one CPU, read-only filesystem except a 64 MB `/tmp`, user
-`nobody` with no capabilities and `no-new-privileges`. Compiling may take 30 s, each test
-3 s, and the whole container 40 s.
+`nobody` with no capabilities and `no-new-privileges`, and no file larger than 10 MB (`fsize`
+ulimit). Compiling may take 30 s, each test 3 s, and the whole container 40 s.
+
+Run containers carry the label `algosproj.sandbox=runner`. When the service starts it removes any
+container with that label (left over after a crash); containers without it are never touched. So run
+only one sandbox process per Docker host.

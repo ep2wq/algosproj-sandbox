@@ -31,8 +31,11 @@ server-side. Never trust a score sent by the client.
 - Each submission runs in its own container, destroyed afterward. Every container must
   have: no network, 256 MB memory with swap equal to memory, a pids limit of 64, one CPU,
   user `nobody` with all capabilities dropped and `no-new-privileges`, and a read-only
-  filesystem apart from an exec-enabled 64 MB tmpfs at `/tmp`. Timeouts: 30 s compile,
-  3 s per test, 40 s for the whole container.
+  filesystem apart from an exec-enabled 64 MB tmpfs at `/tmp`, an `fsize` ulimit of 10 MB and the
+  label `algosproj.sandbox=runner`. Timeouts: 30 s compile, 3 s per test, 40 s for the whole container.
+- At most `SANDBOX_MAX_RUNS` (default 4) runs at once; a full sandbox answers 503 "Sandbox busy"
+  with `Retry-After: 5`, no queue. On start-up the service removes containers with the runner label
+  (leftovers of a crash), never others: one sandbox process per Docker host.
 - One runner image holds every language. `runner.py` has the language table, reads the
   submission from the `SUBMISSION` env var (base64 JSON) and prints exactly one JSON
   object. Its output format is the same for every language, so adding a language means
@@ -50,15 +53,17 @@ server-side. Never trust a score sent by the client.
 - `runner.py` must stay PID 1 in the container: after each program run it kills every
   other process (`kill(-1)`) and reaps zombies, and it makes itself non-dumpable so user
   code can't read the expected outputs from `/proc/1/environ`.
-- Reject any request that doesn't carry the shared secret in the `X-Sandbox-Secret` header.
+- Reject any request that doesn't carry the shared secret in the `X-Sandbox-Secret` header: a
+  middleware checks it (constant-time, on bytes) before the body is read; only `/health` and
+  `/languages` are public. FastAPI docs are off unless `SANDBOX_DOCS=1`.
 - Commands:
   - Build the image (again after any change in `runner/`): `docker build -t algosproj-runner runner`
   - Run: `python -m venv venv`, `pip install -r requirements.txt`, copy `.env.example`
     to `.env`, `uvicorn app.main:app --reload --port 8001`
   - Test (needs Docker running and the image built): `python -m pytest tests -v`
   - `Dockerfile` builds the API image (`docker build -t algosproj-sandbox .`), for local dev only; see README "Docker".
-- The local `.env` sets `SANDBOX_SECRET`, the only variable the app reads from it; the
-  backend's `SANDBOX_SECRET` must have the same value.
+- The local `.env` sets `SANDBOX_SECRET` (and optionally `SANDBOX_MAX_RUNS`, `SANDBOX_DOCS`); the
+  backend's `SANDBOX_SECRET` must have the same value. `requirements.txt` pins exact versions.
 
 ## Working rules
 
@@ -87,6 +92,10 @@ server-side. Never trust a score sent by the client.
 - One runner image for python, java, javascript and cpp, with all container limits.
 - 34 pytest tests pass against real Docker, including adversarial ones and a check that
   user code can't find the expected output. Committed and pushed.
+- 2026-11-03 (audit fixes): secret check before the body, docs off, 4-run limit with 503, 10 MB
+  `fsize`, labelled containers + start-up cleanup, zero results never `passed`, pinned requirements.
+  6 new tests (40 in total); the new ones and the non-adversarial ones were run (22 passed), the
+  adversarial ones were not re-run in that task.
 
 ### In progress
 - Nothing.
