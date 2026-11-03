@@ -120,8 +120,8 @@ def build_response(output, test_cases, wall_ms):
         status = "timeout"
     elif any(r["error"] is not None for r in runner_results):
         status = "error"  # crashed: runtime error, syntax error in an interpreted language, out of memory
-    elif all(r["passed"] for r in runner_results):
-        status = "passed"
+    elif test_cases and len(runner_results) == len(test_cases) and all(r["passed"] for r in runner_results):
+        status = "passed"  # never for zero results: an empty list is not "all passed"
     else:
         status = "failed"
     return {"status": status, "results": results, "runtime_ms": data["runtime_ms"], "compile_error": None}

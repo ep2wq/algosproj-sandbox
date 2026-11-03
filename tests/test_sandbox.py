@@ -496,6 +496,14 @@ def test_api_docs_are_off_by_default(base_url):
         assert error.value.code == 404, path
 
 
+def test_zero_results_are_never_graded_as_passed():
+    from app import sandbox
+
+    output = json.dumps({"compile_error": None, "runtime_ms": 1, "results": []}).encode()
+    assert sandbox.build_response(output, [], 1)["status"] != "passed"
+    assert sandbox.build_response(output, ONE_TEST, 1)["status"] != "passed"
+
+
 SLEEP_2S = "import time\ntime.sleep(2)\nprint(input())\n"
 
 
