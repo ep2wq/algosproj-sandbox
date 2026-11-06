@@ -5,6 +5,49 @@ algorithms. It takes code plus test cases, runs them in a throwaway Docker conta
 returns the results as JSON. Only the Laravel backend (`algosproj-backend`) calls this
 service, using a shared secret; it is never exposed to the public internet.
 
+## Architecture
+
+A request passes the secret check, then the limits and a free run slot, and runs in a fresh runner container.
+
+```mermaid
+flowchart TD
+    backend(("Laravel backend"))
+    subgraph api["API service"]
+        secret["Secret middleware<br/>[main.py]"]
+        endpoints["FastAPI endpoints<br/>[main.py]"]
+        health["Health and languages<br/>[main.py]"]
+        checks["Request checks and slots<br/>[main.py]"]
+    end
+    subgraph orch["Container orchestration"]
+        run["Container orchestration<br/>[sandbox.py]"]
+        cleanup["Leftover cleanup<br/>[sandbox.py]"]
+        resp["Build API response<br/>[sandbox.py]"]
+    end
+    docker["Docker daemon"]
+    subgraph runner["Runner execution"]
+        entry["Runner entry point<br/>[runner.py]"]
+        decode["Decode and write code<br/>[runner.py]"]
+        compile["Compile by language<br/>[runner.py]"]
+        tests["Run test cases<br/>[runner.py]"]
+    end
+    backend -->|calls API| secret
+    secret -->|passes checked requests| endpoints
+    endpoints -->|serves routes, no secret needed| health
+    endpoints -->|validates and limits| checks
+    endpoints -->|cleans at startup| cleanup
+    cleanup -->|removes labelled containers| docker
+    checks -->|runs submission| run
+    run -->|parses runner output| resp
+    resp -->|returns results| endpoints
+    run -->|creates and removes containers| docker
+    docker -->|starts runner image| entry
+    entry -->|emits JSON output| run
+    entry -->|decodes submission| decode
+    decode -->|writes source, compiles if needed| compile
+    decode -->|prepares test inputs| tests
+    compile -->|runs after successful compile| tests
+```
+
 ## Stack
 
 Python, FastAPI, Docker SDK for Python. One runner image (`algosproj-runner`) holds every
